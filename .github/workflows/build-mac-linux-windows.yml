@@ -44,6 +44,7 @@ jobs:
         with:
           script-name: main.py
           standalone: true
+          onefile: true
           macos-create-app-bundle: ${{ runner.os == 'macOS' }}
           enable-plugins: tk-inter
           
