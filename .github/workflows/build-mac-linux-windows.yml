@@ -45,7 +45,7 @@ jobs:
           script-name: main.py
           standalone: true
           onefile: true
-          macos-create-app-bundle: ${{ runner.os == 'macOS' }}
+          macos-create-app-bundle: true
           enable-plugins: tk-inter
           
       # Uploads artifacts
