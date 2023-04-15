@@ -351,13 +351,13 @@ def main_menu():
 
         discovered_list.delete(0, END)
         adap = ifaddr.get_adapters()
-        for j in range(len(adap)):
-            k = str(adap[j].nice_name)
+        for a in adap:
+            k = str(a.nice_name)
             if 'virtual' in k:
                 continue
             elif 'Virtual' in k:
                 continue
-            a = adap[j].name
+            a = a.name
             o = threading.Thread(target=try_one_adapter, args=(a,))
             o.start()
 

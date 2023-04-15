@@ -1,7 +1,8 @@
 import platform
 
 import cv2
-import dxcam
+if platform.system() == 'Windows':
+    import dxcam
 import mss
 import numpy
 
