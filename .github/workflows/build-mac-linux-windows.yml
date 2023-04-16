@@ -33,21 +33,18 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             **/requirements*.txt
-
       # Install dependencies
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
-
       # Build python script into a stand-alone exe
       - uses: AlexMihai1804/Nuitka-Action@main
         with:
-          script-name: main.py
+          script-name: test.py
           standalone: true
-          onefile: true
-          macos-create-app-bundle: true
-          enable-plugins: tk-inter
-          
+          macos-create-app-bundle: ${{ runner.os == 'macOS' }}
+          disable-console: true
+
       # Uploads artifacts
       - name: "Upload Artifacts"
         uses: actions/upload-artifact@v3
@@ -56,4 +53,4 @@ jobs:
           path: |
             build/*.exe
             build/*.bin
-            build/*.app
+            build/*.app/**/*
