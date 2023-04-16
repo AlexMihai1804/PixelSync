@@ -1,7 +1,10 @@
+import threading
 import tkinter as tk
 
 import customtkinter
+import ifaddr
 from customtkinter import *
+from yeelight import discover_bulbs
 
 from light import *
 from save_data import *
@@ -91,9 +94,11 @@ def load_settings():
     global fps
     global bar_correction
     global rate
+    global bar_update
     settings = load()
     bar_correction = settings['bar_correction']
     fps = settings['fps']
+    bar_update = settings['black_bar']
     rate = 1 / fps
     l = settings['lights']
     for x in l:
@@ -111,10 +116,11 @@ def load_settings():
 def save_settings():
     global fps
     global bar_correction
+    global bar_update
     l = []
     l.extend(connected_lights)
     l.extend(disconnected_lights)
-    settings = {"fps": fps, 'bar_correction': bar_correction, 'lights': l}
+    settings = {"fps": fps, 'bar_correction': bar_correction, 'lights': l, 'black_bar': bar_update}
     save(settings)
 
 
@@ -156,6 +162,8 @@ def refresh_disconnected():
 
 def sync_lights(i):
     global bar_correction
+    global bar_update
+    global fps
 
     def light_connected():
         for x in lights:
@@ -163,7 +171,7 @@ def sync_lights(i):
                 return True
         return False
 
-    m = Monitor(i, bar_correction, 5)
+    m = Monitor(i, bar_correction, bar_update * fps / 2)
     k = 0
     while run:
         t1 = time.time()
@@ -255,9 +263,16 @@ def main_menu():
     def select_auto_add(frame):
         frame.tkraise()
         auto_discover()
+
     def select_edit(frame):
         frame.tkraise()
         add_in_list()
+        reset_fields_edit()
+
+    def select_settings(frame):
+        frame.tkraise()
+        reset_fields_settings()
+
     customtkinter.set_default_color_theme("dark-blue")
     root = CTk()
     # main_menu_frame
@@ -306,8 +321,8 @@ def main_menu():
     edit_lights_button = CTkButton(config_buttons_frame, text='Edit lights',
                                    command=lambda: select_edit(edit_lights_frame))
     edit_lights_button.pack(padx=16, pady=8, fill='x')
-    edit_settings_button = CTkButton(config_buttons_frame, text='Edit settings',
-                                     command=lambda: select_frame(edit_settings_frame))
+    edit_settings_button = CTkButton(config_buttons_frame, text='Settings',
+                                     command=lambda: select_settings(edit_settings_frame))
     edit_settings_button.pack(padx=16, pady=8, fill='x')
 
     config_buttons_frame.grid(row=1, column=0, sticky=N + S + E + W, padx=8, pady=8)
@@ -569,21 +584,22 @@ def main_menu():
     edit_lights_frame.grid_columnconfigure(1, minsize=200, weight=1)
     edit_lights_frame.grid_columnconfigure(2, minsize=200, weight=1)
     CTkLabel(edit_lights_frame, text='Edit lights', font=(CTkFont, 26)).grid(column=0, row=0, columnspan=3, pady=15)
-    list_items=[]
+    list_items = []
+
     def selected_edit(e):
-        i=edit_list.curselection()[0]
+        i = edit_list.curselection()[0]
         for l in connected_lights:
-            if list_items[i]==l[0]:
-                x=l
+            if list_items[i] == l[0]:
+                x = l
         for l in disconnected_lights:
-            if list_items[i]==l[0]:
-                x=l
+            if list_items[i] == l[0]:
+                x = l
         sat_slider_edit.set(x[4])
         update_label_sat(sat_val_edit.get(), sat_label_edit)
         bri_slider_edit.set(x[3])
         update_label_bri(bri_val_edit.get(), bri_label_edit)
-        entry_name_edit.delete(0,END)
-        entry_name_edit.insert(0,x[5])
+        entry_name_edit.delete(0, END)
+        entry_name_edit.insert(0, x[5])
         position_select_var_edit.set(position_int_to_string(x[2]))
         monitor_select_var_edit.set(str(x[1]))
         if x[6]:
@@ -592,29 +608,32 @@ def main_menu():
         else:
             enable_check_var_edit.set(0)
             check_enable_edit.deselect()
+
     edit_list = tk.Listbox(master=edit_lights_frame, selectbackground='#1f538d', fg='#DCE4EE', height=6)
     edit_list.grid(column=0, row=1, rowspan=3, padx=8, pady=8, sticky=E + W)
     edit_list.configure(background="grey10", borderwidth=0, highlightthickness=0, selectforeground='#DCE4EE',
-                              activestyle='none', font=(CTkFont, 12))
+                        activestyle='none', font=(CTkFont, 12))
     edit_list.bind('<<ListboxSelect>>', selected_edit)
+
     def add_in_list():
         nonlocal list_items
-        list_items=[]
-        edit_list.delete(0,END)
+        list_items = []
+        edit_list.delete(0, END)
         for l in connected_lights:
-            edit_list.insert(END,l[5])
+            edit_list.insert(END, l[5])
             list_items.append(l[0])
         for l in disconnected_lights:
-            edit_list.insert(END,l[5])
+            edit_list.insert(END, l[5])
             list_items.append(l[0])
+
     def identify(sel):
         if sel == ():
             pass
         else:
             s = (sel[0])
-            ip=list_items[s]
+            ip = list_items[s]
             for l in connected_lights:
-                if ip==l[0]:
+                if ip == l[0]:
                     Light(ip).identify()
                     return
 
@@ -622,43 +641,46 @@ def main_menu():
     CTkButton(edit_lights_frame, text='Identify selected', font=(CTkFont, 20),
               command=lambda: identify(edit_list.curselection())).grid(row=1, column=2, sticky=W)
     CTkLabel(edit_lights_frame, text='Light name', font=(CTkFont, 20)).grid(column=1, row=2, columnspan=2, sticky=W,
-                                                                              padx=5, pady=5)
-    entry_name_edit = customtkinter.CTkEntry(master=edit_lights_frame, placeholder_text="Light name", font=(CTkFont, 12))
+                                                                            padx=5, pady=5)
+    entry_name_edit = customtkinter.CTkEntry(master=edit_lights_frame, placeholder_text="Light name",
+                                             font=(CTkFont, 12))
     entry_name_edit.grid(column=1, row=3, columnspan=2, sticky=W + E, padx=5, pady=5)
     sat_label_edit = CTkLabel(edit_lights_frame, text='Saturation:100', font=(CTkFont, 20))
     sat_label_edit.grid(column=0, row=5, padx=5, pady=5)
     sat_val_edit = customtkinter.IntVar()
     sat_slider_edit = CTkSlider(edit_lights_frame, from_=0, to=200, number_of_steps=20, variable=sat_val_edit,
-                           command=lambda x: update_label_sat(x, sat_label_edit))
+                                command=lambda x: update_label_sat(x, sat_label_edit))
     sat_slider_edit.set(100)
     sat_slider_edit.grid(row=5, column=1, columnspan=2, sticky=E + W, padx=5, pady=5)
-
     bri_label_edit = CTkLabel(edit_lights_frame, text='Brightness:100', font=(CTkFont, 20))
     bri_label_edit.grid(column=0, row=6, padx=5, pady=5)
     bri_val_edit = customtkinter.IntVar()
     bri_slider_edit = CTkSlider(edit_lights_frame, from_=0, to=200, number_of_steps=20, variable=bri_val_edit,
-                           command=lambda x: update_label_bri(x, bri_label_edit))
+                                command=lambda x: update_label_bri(x, bri_label_edit))
     bri_slider_edit.set(100)
     bri_slider_edit.grid(row=6, column=1, columnspan=2, sticky=E + W, padx=5, pady=5)
     CTkLabel(edit_lights_frame, text='Select position', font=(CTkFont, 20)).grid(column=0, row=7, padx=5, pady=5)
     position_select_var_edit = customtkinter.StringVar(value="WHOLE SCREEN")
     position_select_edit = customtkinter.CTkComboBox(master=edit_lights_frame, state="readonly",
-                                                values=["WHOLE SCREEN", "TOP", "LEFT", "BOTTOM", "RIGHT", "TOP-CENTRE",
-                                                        "LEFT-CENTRE", "BOTTOM-CENTRE", "RIGHT-CENTRE",
-                                                        "CORNER-TOP-LEFT", "CORNER-BOTTOM-LEFT", "CORNER-BOTTOM-RIGHT",
-                                                        "CORNER-TOP-RIGHT"], variable=position_select_var_edit)
+                                                     values=["WHOLE SCREEN", "TOP", "LEFT", "BOTTOM", "RIGHT",
+                                                             "TOP-CENTRE", "LEFT-CENTRE", "BOTTOM-CENTRE",
+                                                             "RIGHT-CENTRE", "CORNER-TOP-LEFT", "CORNER-BOTTOM-LEFT",
+                                                             "CORNER-BOTTOM-RIGHT", "CORNER-TOP-RIGHT"],
+                                                     variable=position_select_var_edit)
     position_select_edit.grid(column=1, row=7, sticky=E + W, padx=5, pady=5)
     CTkLabel(edit_lights_frame, text='Select monitor', font=(CTkFont, 20)).grid(column=0, row=8, padx=5, pady=5)
     monitor_select_var_edit = customtkinter.StringVar(value="1")
     monitor_select_edit = customtkinter.CTkComboBox(master=edit_lights_frame, state="readonly",
-                                               values=[str(m + 1) for m in range(mon_number() - 1)],
-                                               variable=monitor_select_var_edit)
+                                                    values=[str(m + 1) for m in range(mon_number() - 1)],
+                                                    variable=monitor_select_var_edit)
     monitor_select_edit.grid(column=1, row=8, sticky=E + W, padx=5, pady=5)
     enable_check_var_edit = customtkinter.IntVar()
     enable_check_var_edit.set(1)
-    check_enable_edit = customtkinter.CTkCheckBox(master=edit_lights_frame, text="Enable light", variable=enable_check_var_edit,
-                                             onvalue=1, offvalue=2, font=(CTkFont, 20))
+    check_enable_edit = customtkinter.CTkCheckBox(master=edit_lights_frame, text="Enable light",
+                                                  variable=enable_check_var_edit, onvalue=1, offvalue=2,
+                                                  font=(CTkFont, 20))
     check_enable_edit.grid(column=0, row=9, padx=5, pady=5)
+
     def reset_fields_edit():
         sat_slider_edit.set(100)
         update_label_sat(sat_val_edit.get(), sat_label_edit)
@@ -669,43 +691,47 @@ def main_menu():
         position_select_edit.set('WHOLE SCREEN')
         enable_check_var_edit.set(1)
         monitor_select_var_edit.set('1')
+
     def delete_light():
-        i=edit_list.curselection()
-        if i==():
+        i = edit_list.curselection()
+        if i == ():
             return
-        i=i[0]
-        for k,x in enumerate(connected_lights):
-            if list_items[i]==x[0]:
+        i = i[0]
+        for k, x in enumerate(connected_lights):
+            if list_items[i] == x[0]:
                 connected_lights.pop(k)
                 lights.pop(k)
                 edit_list.delete(i)
+                reset_fields_edit()
                 return
-        for k,x in enumerate(discovered_list):
-            if list_items[i]==x[0]:
+        for k, x in enumerate(disconnected_lights):
+            if list_items[i] == x[0]:
                 disconnected_lights.pop(k)
                 edit_list.delete(i)
+                reset_fields_edit()
                 return
+
     def save_light_settings():
         i = edit_list.curselection()
         if i == ():
             return
         i = i[0]
-        for k,x in enumerate(connected_lights):
-            if list_items[i]==x[0]:
-                connected_lights[k][1]=int(monitor_select_var_edit.get())
-                connected_lights[k][2]=position_string_to_int(position_select_var_edit.get())
-                connected_lights[k][3]=bri_val_edit.get()
-                connected_lights[k][4]=sat_val_edit.get()
-                connected_lights[k][5]=entry_name_edit.get()
-                if enable_check_var_edit.get()==1:
-                    connected_lights[k][6]=True
+        for k, x in enumerate(connected_lights):
+            if list_items[i] == x[0]:
+                connected_lights[k][1] = int(monitor_select_var_edit.get())
+                connected_lights[k][2] = position_string_to_int(position_select_var_edit.get())
+                connected_lights[k][3] = bri_val_edit.get()
+                connected_lights[k][4] = sat_val_edit.get()
+                connected_lights[k][5] = entry_name_edit.get()
+                if enable_check_var_edit.get() == 1:
+                    connected_lights[k][6] = True
                 else:
-                    connected_lights[k][6]=False
+                    connected_lights[k][6] = False
                 lights[k].set_prop(connected_lights[k][1:])
                 save_settings()
                 return
-        for k,x in enumerate(disconnected_lights):
-            if list_items[i]==x[0]:
+        for k, x in enumerate(disconnected_lights):
+            if list_items[i] == x[0]:
                 disconnected_lights[k][1] = int(monitor_select_var_edit.get())
                 disconnected_lights[k][2] = position_string_to_int(position_select_var_edit.get())
                 disconnected_lights[k][3] = bri_val_edit.get()
@@ -717,14 +743,81 @@ def main_menu():
                     disconnected_lights[k][6] = False
                 save_settings()
                 return
-    CTkButton(master=edit_lights_frame, text='Save light',command=save_light_settings,  font=(CTkFont, 20)).grid(column=1,row=10, pady=20)
-    CTkButton(master=edit_lights_frame, text='Back',  font=(CTkFont, 20)).grid(column=0, row=10,pady=20)
-    CTkButton(master=edit_lights_frame, text='Delete',command=delete_light, font=(CTkFont, 20)).grid(column=2, row=10,pady=20)
+
+    def back_edit():
+        select_frame(status_frame)
+        reset_fields_edit()
+
+    CTkButton(master=edit_lights_frame, text='Save light', command=save_light_settings, font=(CTkFont, 20)).grid(
+        column=1, row=10, pady=20)
+    CTkButton(master=edit_lights_frame, text='Back', command=back_edit, font=(CTkFont, 20)).grid(column=0, row=10,
+                                                                                                 pady=20)
+    CTkButton(master=edit_lights_frame, text='Delete', command=delete_light, font=(CTkFont, 20)).grid(column=2, row=10,
+                                                                                                      pady=20)
     edit_lights_frame.grid(row=0, column=1, rowspan=2, sticky=N + S + E + W, padx=8, pady=8)
     # settings frame
     edit_settings_frame = CTkFrame(root)
-    CTkLabel(edit_settings_frame, text='Edit settings').pack()
+    edit_settings_frame.grid_columnconfigure(0, minsize=300, weight=1)
+    edit_settings_frame.grid_columnconfigure(1, minsize=300, weight=1)
+    CTkLabel(edit_settings_frame, text='Edit settings').grid(row=0, column=0, columnspan=2)
+    global fps
+
+    def update_label_fps(val, label):
+        label.configure(text='Fps:' + str(int(val)))
+
+    fps_label = CTkLabel(edit_settings_frame, text='Fps:' + str(fps), font=(CTkFont, 20))
+    fps_label.grid(row=1, column=0, padx=15, pady=15, sticky=W)
+    fps_val = customtkinter.IntVar()
+    fps_val.set(fps)
+    fps_slider = CTkSlider(edit_settings_frame, from_=1, to=60, number_of_steps=60, variable=fps_val,
+                           command=lambda x: update_label_fps(x, fps_label))
+    fps_slider.grid(row=2, column=0, sticky=E + W, padx=5, pady=15)
+    global bar_correction
+    black_corection_var = customtkinter.IntVar()
+    black_corection_var.set(int(bar_correction))
+    black_corection_check = customtkinter.CTkCheckBox(master=edit_settings_frame, text="Black bar correction",
+                                                      variable=black_corection_var, onvalue=1, offvalue=2,
+                                                      font=(CTkFont, 20))
+    black_corection_check.grid(column=0, row=3, padx=15, pady=15, sticky=W)
+    global bar_update
+
+    def update_label_bar(val, label):
+        label.configure(text='Black bar update interval:' + str(int(val) / 2) + 's')
+
+    black_update_label = CTkLabel(edit_settings_frame, text='Black bar update interval:' + str(bar_update / 2) + 's',
+                                  font=(CTkFont, 20))
+    black_update_label.grid(row=4, column=0, padx=15, pady=15, sticky=W)
+    black_update_var = customtkinter.IntVar()
+    black_update_var.set(bar_update)
+    black_update_slider = CTkSlider(edit_settings_frame, from_=1, to=10, number_of_steps=9, variable=black_update_var,
+                                    command=lambda x: update_label_bar(x, black_update_label))
+    black_update_slider.grid(row=5, column=0, sticky=E + W, padx=5, pady=15)
+
+    def save_settings_b():
+        global fps
+        global bar_update
+        global bar_correction
+        fps = fps_val.get()
+        bar_correction = bool(black_corection_var.get())
+        bar_update = black_update_var.get()
+        save_settings()
+
+    def reset_fields_settings():
+        global fps
+        global bar_update
+        global bar_correction
+        fps_val.set(fps)
+        update_label_fps(fps, fps_label)
+        black_corection_var.set(int(bar_correction))
+        black_update_var.set(bar_update)
+        update_label_bar(bar_update, black_update_label)
+
+    CTkButton(master=edit_settings_frame, text='Save settings', command=save_settings_b, font=(CTkFont, 20)).grid(
+        column=1, row=10, pady=20)
+    CTkButton(master=edit_settings_frame, text='Back', command=lambda: select_frame(status_frame),
+              font=(CTkFont, 20)).grid(column=0, row=10, pady=20)
     edit_settings_frame.grid(row=0, column=1, rowspan=2, sticky=N + S + E + W, padx=8, pady=8)
+    select_frame(status_frame)
     root.protocol("WM_DELETE_WINDOW", close_main_window)
     threading.Thread(target=update_lights_state).start()
     root.mainloop()

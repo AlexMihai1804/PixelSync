@@ -1,8 +1,6 @@
-import threading
 import time
 
-import ifaddr
-from yeelight import Bulb, LightType, discover_bulbs
+from yeelight import Bulb, LightType
 
 
 class Light:
@@ -254,31 +252,3 @@ def light_online(ip):
         return 1
     except:
         return 0
-
-
-def auto_discover():
-    bulb_ips = []
-
-    def try_one_adapter(z):
-        try:
-            d = discover_bulbs(interface=z)
-            for x in d:
-                line = str(x)
-                k1 = line.find('ip') + 6
-                k2 = line.find('port') - 4
-                ip = line[k1:k2]
-                bulb_ips.append(ip)
-        except:
-            pass
-
-    adap = ifaddr.get_adapters()
-    done = []
-    for j in range(len(adap)):
-        k = str(adap[j].nice_name)
-        if 'virtual' in k:
-            continue
-        elif 'Virtual' in k:
-            continue
-        a = adap[j].name
-        o = threading.Thread(target=try_one_adapter, args=(a, j))
-        o.start()

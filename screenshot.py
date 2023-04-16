@@ -1,6 +1,7 @@
 import platform
 
 import cv2
+
 if platform.system() == 'Windows':
     import dxcam
 import mss

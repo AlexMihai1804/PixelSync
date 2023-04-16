@@ -1,6 +1,6 @@
 import json
 
-settings = {"fps": 10, 'bar_correction': 1, 'lights': []}
+settings = {"fps": 10, 'bar_correction': 1,'black_bar':3, 'lights': []}
 
 
 def save(sett):
