@@ -37,7 +37,7 @@ jobs:
       # Build python script into a stand-alone exe
       - uses: AlexMihai1804/Nuitka-Action@main
         with:
-          script-name: test.py
+          script-name: main.py
           standalone: true
           macos-create-app-bundle: ${{ runner.os == 'macOS' }}
           disable-console: true
