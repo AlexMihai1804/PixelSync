@@ -1,16 +1,20 @@
 import platform
 
 import cv2
+import mss
+import numpy as np
 
 if platform.system() == 'Windows':
     import dxcam
-import mss
-import numpy
 
 
 class Monitor:
-    def __init__(self, n, bar_correction, bar_update):
-        self.mon_n = n
+    def __init__(self, monitor_index: int, bar_correction: bool, bar_update: float) -> None:
+        self.mon_n = monitor_index
+        self.bar_correction = bar_correction
+        self.bar_update = bar_update
+        self.k = 0
+        self.bbox = (0, 0, 119, 119)
         if platform.system() == 'Windows':
             self.platform = 0
             self.camera = dxcam.create(output_idx=self.mon_n - 1)
@@ -19,32 +23,27 @@ class Monitor:
             self.platform = 1
             self.mon = mss.mss().monitors[self.mon_n]
             self.camera = None
-        self.bar_correction = bar_correction
-        self.bar_update = bar_update
-        self.k = 0
-        self.bbox = (0, 0, 119, 119)
 
-    def get_mon_hsv(self):
+    def get_mon_hsv(self) -> list:
+        # Capture and process screenshot to get HSV values for 13 regions
         scr = self.resize_scr()
-        hsv = []
-        for i in range(13):
-            hsv.append(self.determine_hsv(scr, i))
-        return hsv
+        hsv_values = [self.determine_hsv(scr, pos) for pos in range(13)]
+        return hsv_values
 
     def take_scr(self):
         if self.platform == 0:
-            s = self.camera.grab()
-            while s is None:
-                s = self.camera.grab()
+            img = self.camera.grab()
+            while img is None:
+                img = self.camera.grab()
         else:
-            s = mss.mss().grab(self.mon)
-        return s
+            img = mss.mss().grab(self.mon)
+        return img
 
     def resize_scr(self):
-        scr = numpy.array(self.take_scr())
+        scr = np.array(self.take_scr())
         scr = cv2.resize(scr, (120, 120), interpolation=cv2.INTER_AREA)
         scr = scr[:, :, :3]
-        if self.bar_correction is True:
+        if self.bar_correction:
             bbox2 = self.trim(scr)
             if self.bbox == bbox2:
                 self.k += 1
@@ -65,65 +64,64 @@ class Monitor:
             scr = cv2.resize(scr, (3, 3), interpolation=cv2.INTER_AREA)
         return scr
 
-    def trim(self, im):
-        y_nonzero, x_nonzero, _ = numpy.nonzero(im)
-        left, upper, right, lower = numpy.min(x_nonzero), numpy.min(y_nonzero), numpy.max(x_nonzero), numpy.max(
-            y_nonzero)
+    def trim(self, im: np.ndarray) -> tuple:
+        # Determine the bounding box of nonzero pixels for black bar correction
+        y_nonzero, x_nonzero, _ = np.nonzero(im)
+        left, upper, right, lower = int(np.min(x_nonzero)), int(np.min(y_nonzero)), int(np.max(x_nonzero)), int(
+            np.max(y_nonzero))
         x = min(left, 119 - right, 40)
         y = min(upper, 119 - lower, 20)
-        box = x, y, 119 - x, 119 - y
-        return box
+        return (x, y, 119 - x, 119 - y)
 
-    def determine_hsv(self, scr, position):
-        r = 0
-        g = 0
-        b = 0
+    def determine_hsv(self, scr, position: int) -> tuple:
+        # Calculate HSV values for the specified region
+        r = g = b = 0
         if position == 0:
-            for x in range(0, 3):
-                for y in range(0, 3):
+            for x in range(3):
+                for y in range(3):
                     k, i, j = scr[x][y]
                     r += k
                     g += i
                     b += j
-            r = int(r / 9)
-            g = int(g / 9)
-            b = int(b / 9)
+            r //= 9;
+            g //= 9;
+            b //= 9
         elif position == 1:
-            for x in range(0, 3):
+            for x in range(3):
                 k, i, j = scr[0][x]
-                r += k
-                g += i
+                r += k;
+                g += i;
                 b += j
-            r = int(r / 3)
-            g = int(g / 3)
-            b = int(b / 3)
+            r //= 3;
+            g //= 3;
+            b //= 3
         elif position == 2:
-            for x in range(0, 3):
+            for x in range(3):
                 k, i, j = scr[x][0]
-                r += k
-                g += i
+                r += k;
+                g += i;
                 b += j
-            r = int(r / 3)
-            g = int(g / 3)
-            b = int(b / 3)
+            r //= 3;
+            g //= 3;
+            b //= 3
         elif position == 3:
-            for x in range(0, 3):
+            for x in range(3):
                 k, i, j = scr[2][x]
-                r += k
-                g += i
+                r += k;
+                g += i;
                 b += j
-            r = int(r / 3)
-            g = int(g / 3)
-            b = int(b / 3)
+            r //= 3;
+            g //= 3;
+            b //= 3
         elif position == 4:
-            for x in range(0, 3):
+            for x in range(3):
                 k, i, j = scr[x][2]
-                r += k
-                g += i
+                r += k;
+                g += i;
                 b += j
-            r = int(r / 3)
-            g = int(g / 3)
-            b = int(b / 3)
+            r //= 3;
+            g //= 3;
+            b //= 3
         elif position == 5:
             r, g, b = scr[0][1]
         elif position == 6:
@@ -146,7 +144,6 @@ class Monitor:
         mx = max(r, g, b)
         mn = min(r, g, b)
         df = mx - mn
-        h = None
         if mx == mn:
             h = 0
         elif mx == r:
@@ -155,13 +152,10 @@ class Monitor:
             h = (60 * ((b - r) / df) + 120) % 360
         elif mx == b:
             h = (60 * ((r - g) / df) + 240) % 360
-        if mx == 0:
-            s = 0
-        else:
-            s = (df / mx) * 100
+        s = 0 if mx == 0 else (df / mx) * 100
         v = mx * 100
         return h, s, v
 
 
-def mon_number():
+def mon_number() -> int:
     return len(mss.mss().monitors)
